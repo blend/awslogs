@@ -211,20 +211,22 @@ class TestAWSLogs(unittest.TestCase):
         client = Mock()
         botoclient.return_value = client
         client.get_paginator.return_value.paginate.return_value = [
-            {'logStreams': [self._stream('A'),
-                            self._stream('B'),
-                            self._stream('C')],
+            {'logStreams': [self._stream('AA'),
+                            self._stream('AB'),
+                            self._stream('AC')],
              'nextToken': 1},
-            {'logStreams': [self._stream('D'),
-                            self._stream('E'),
-                            self._stream('F')],
+            {'logStreams': [self._stream('AD'),
+                            self._stream('AE'),
+                            self._stream('AF')],
              'nextToken': 2},
-            {'logStreams': [self._stream('G')]},
+            {'logStreams': [self._stream('AG')]},
         ]
 
-        awslogs = AWSLogs(log_group_name='group')
-        self.assertEqual([g for g in awslogs.get_streams()],
-                         ['A', 'B', 'C', 'D', 'E', 'F', 'G'])
+        awslogs = AWSLogs()
+        self.assertEqual([g for g in awslogs.get_streams('group_name')],
+                         ['AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG'])
+        self.assertEqual([g for g in awslogs.get_streams('group_name', 'A')],
+                         ['AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG']) # TODO test this properly
 
     @patch('boto3.client')
     @patch('awslogs.core.AWSLogs.parse_datetime')
@@ -239,42 +241,8 @@ class TestAWSLogs(unittest.TestCase):
              }
         ]
         parse_datetime.side_effect = [5, 7]
-        awslogs = AWSLogs(log_group_name='group', start='5', end='7')
-        self.assertEqual([g for g in awslogs.get_streams()], ['B', 'C'])
-
-    @patch('boto3.client')
-    def test_get_streams_from_pattern(self, botoclient):
-        client = Mock()
-        botoclient.return_value = client
-
-        side_effect = [
-            {'logStreams': [self._stream('AAA'),
-                            self._stream('ABA'),
-                            self._stream('ACA')],
-             'nextToken': 1},
-            {'logStreams': [self._stream('BAA'),
-                            self._stream('BBA'),
-                            self._stream('BBB')],
-             'nextToken': 2},
-            {'logStreams': [self._stream('CAC')]},
-        ]
-
-        awslogs = AWSLogs()
-
-        client.get_paginator.return_value.paginate.return_value = side_effect
-        expected = ['AAA', 'ABA', 'ACA', 'BAA', 'BBA', 'BBB', 'CAC']
-        actual = [s for s in awslogs._get_streams_from_pattern('X', 'ALL')]
-        self.assertEqual(actual, expected)
-
-        client.get_paginator.return_value.paginate.return_value = side_effect
-        expected = ['AAA', 'ABA', 'ACA']
-        actual = [s for s in awslogs._get_streams_from_pattern('X', 'A')]
-        self.assertEqual(actual, expected)
-
-        client.get_paginator.return_value.paginate.return_value = side_effect
-        expected = ['AAA', 'ACA']
-        actual = [s for s in awslogs._get_streams_from_pattern('X', 'A[AC]A')]
-        self.assertEqual(actual, expected)
+        awslogs = AWSLogs(start='5', end='7')
+        self.assertEqual([g for g in awslogs.get_streams('log_group_name')], ['B', 'C'])
 
     @patch('boto3.client')
     @patch('sys.stdout', new_callable=StringIO)
@@ -502,8 +470,7 @@ class TestAWSLogs(unittest.TestCase):
 
         # None of these match the pattern below: "foo.*"
         streams = [
-            {'logStreams': [self._stream('DDD'),
-                            self._stream('EEE')]}
+            {'logStreams': []}
         ]
 
         def paginator(value):
@@ -516,11 +483,12 @@ class TestAWSLogs(unittest.TestCase):
 
         client.get_paginator.side_effect = paginator
 
-        code = main("awslogs get AAA foo.*".split())
+        code = main("awslogs get AAA foo".split())
+
         self.assertEqual(code, 7)
         self.assertEqual(mock_stderr.getvalue(),
-                         colored("No streams match your pattern 'foo.*' "
-                                 "for the given time period.\n",
+                         colored("No streams match your prefix 'foo' for the "
+                                 "given time period.\n",
                                  "red"))
 
     @patch('boto3.client')

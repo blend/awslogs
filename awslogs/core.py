@@ -39,7 +39,7 @@ class AWSLogs(object):
         self.aws_secret_access_key = kwargs.get('aws_secret_access_key')
         self.aws_session_token = kwargs.get('aws_session_token')
         self.log_group_name = kwargs.get('log_group_name')
-        self.log_stream_name = kwargs.get('log_stream_name')
+        self.log_stream_prefix = kwargs.get('log_stream_prefix')
         self.filter_pattern = kwargs.get('filter_pattern')
         self.watch = kwargs.get('watch')
         self.color_enabled = kwargs.get('color_enabled')
@@ -62,28 +62,19 @@ class AWSLogs(object):
             region_name=self.aws_region
         )
 
-    def _get_streams_from_pattern(self, group, pattern):
-        """Returns streams in ``group`` matching ``pattern``."""
-        pattern = '.*' if pattern == self.ALL_WILDCARD else pattern
-        reg = re.compile('^{0}'.format(pattern))
-        for stream in self.get_streams(group):
-            if re.match(reg, stream):
-                yield stream
 
     def list_logs(self):
-        streams = []
-        if self.log_stream_name != self.ALL_WILDCARD:
-            streams = list(self._get_streams_from_pattern(self.log_group_name, self.log_stream_name))
-            if len(streams) > self.FILTER_LOG_EVENTS_STREAMS_LIMIT:
-                raise exceptions.TooManyStreamsFilteredError(
-                     self.log_stream_name,
-                     len(streams),
-                     self.FILTER_LOG_EVENTS_STREAMS_LIMIT
-                )
-            if len(streams) == 0:
-                raise exceptions.NoStreamsFilteredError(self.log_stream_name)
+        streams = list(self.get_streams(self.log_group_name, self.log_stream_prefix))
+        if len(streams) > self.FILTER_LOG_EVENTS_STREAMS_LIMIT:
+            raise exceptions.TooManyStreamsFilteredError(
+                 self.log_stream_name,
+                 len(streams),
+                 self.FILTER_LOG_EVENTS_STREAMS_LIMIT
+            )
+        elif len(streams) == 0:
+            raise exceptions.NoStreamsFilteredError(self.log_stream_prefix)
 
-        max_stream_length = max([len(s) for s in streams]) if streams else 10
+        max_stream_length = max([len(s) for s in streams]) if streams else 10 # TODO add warning message here
         group_length = len(self.log_group_name)
 
         # Note: filter_log_events paginator is broken
@@ -121,6 +112,7 @@ class AWSLogs(object):
                 kwargs['filterPattern'] = self.filter_pattern
 
             while True:
+                # print 'filtering log events with dictionary: {}'.format(kwargs)
                 response = self.client.filter_log_events(**kwargs)
 
                 for event in response.get('events', []):
@@ -205,7 +197,7 @@ class AWSLogs(object):
 
     def list_streams(self):
         """Lists available CloudWatch logs streams in ``log_group_name``."""
-        for stream in self.get_streams():
+        for stream in self.get_streams(self.log_group_name):
             print(stream)
 
     def get_groups(self):
@@ -218,9 +210,11 @@ class AWSLogs(object):
             for group in page.get('logGroups', []):
                 yield group['logGroupName']
 
-    def get_streams(self, log_group_name=None):
+    def get_streams(self, log_group_name, log_stream_prefix = None):
         """Returns available CloudWatch logs streams in ``log_group_name``."""
-        kwargs = {'logGroupName': log_group_name or self.log_group_name}
+        kwargs = {'logGroupName': log_group_name}
+        if log_stream_prefix is not None:
+            kwargs['logStreamNamePrefix'] = log_stream_prefix
         window_start = self.start or 0
         window_end = self.end or sys.float_info.max
 
