@@ -18,13 +18,17 @@ One of the most powerful features is to query events from several streams and co
     $ awslogs get /var/log/syslog ip-10-1.* --start='2h ago' | grep ERROR
 
 
+Changes in this fork
+--------------------
+Most of the code is unchanged. This fork removes the STREAM_EXPRESSION argument and replaces it with a mandatory STREAM_PREFIX argument. The original fork finds log streams by fetching all log streams for a particular log group, and subsequently filtering on the optional STREAM_EXPRESSION argument. This operation can take minutes for log groups which contain a lot of streams (> 5000). This fork gets around this by forcing the user to specify a log stream prefix, which ultimately reduces the time needed to fech log streams to about a second (assuming that the prefix is well-chosen).
+
 Features
 --------
 
 * Aggregate logs from across streams.
 
   - Aggregate all streams in a group.
-  - Aggregate streams matching a regular expression.
+  - Aggregate streams matching a prefix
 
 * Colored output.
 * List existing groups
@@ -79,9 +83,7 @@ Options
 
 * ``awslogs groups``: List existing groups
 * ``awslogs streams GROUP``: List existing streams withing ``GROUP``
-* ``awslogs get GROUP [STREAM_EXPRESSION]``: Get logs matching ``STREAM_EXPRESSION`` in ``GROUP``.
-
-  - Expressions can be regular expressions or the wildcard ``ALL`` if you want any and don't want to type ``.*``.
+* ``awslogs get GROUP STREAM_PREFIX``: Get logs beginning with ``STREAM_PREFIX`` in ``GROUP``.
 
 **Note:** You need to provide to all these options a valid AWS region using ``--aws-region`` or ``AWS_REGION`` env variable.
 
