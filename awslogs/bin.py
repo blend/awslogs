@@ -76,15 +76,11 @@ def main(argv=None):
 
     get_parser.add_argument("log_group_name",
                             type=str,
-                            default="ALL",
-                            nargs='?',
                             help="log group name")
 
-    get_parser.add_argument("log_stream_name",
+    get_parser.add_argument("log_stream_prefix",
                             type=str,
-                            default="ALL",
-                            nargs='?',
-                            help="log stream name")
+                            help="log stream prefix")
 
     get_parser.add_argument("-f",
                             "--filter-pattern",
