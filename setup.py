@@ -7,7 +7,9 @@ install_requires = [
     'boto3>=1.2.1',
     'jmespath>=0.7.1,<1.0.0',
     'termcolor>=1.1.0',
-    'python-dateutil>=2.4.0'
+    'python-dateutil>=2.4.0',
+    'pystache>=0.5.4',
+    'pyyaml>=3.12'
 ]
 
 

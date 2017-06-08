@@ -3,8 +3,11 @@ import sys
 import os
 import time
 import errno
+import yaml
+import pystache
 from datetime import datetime, timedelta
 from collections import deque
+from .aws_log_generator import AWSLogGenerator
 
 import boto3
 from botocore.compat import json, six, total_seconds
@@ -33,6 +36,7 @@ class AWSLogs(object):
     MAX_EVENTS_PER_CALL = 10000
     ALL_WILDCARD = 'ALL'
 
+    # TODO separate out the required options for each subcommand
     def __init__(self, **kwargs):
         self.aws_region = kwargs.get('aws_region')
         self.aws_access_key_id = kwargs.get('aws_access_key_id')
@@ -51,6 +55,8 @@ class AWSLogs(object):
         self.start = self.parse_datetime(kwargs.get('start'))
         self.end = self.parse_datetime(kwargs.get('end'))
         self.query = kwargs.get('query')
+        self.query_template_file = kwargs.get('query_template_file')
+        self.query_template_args = kwargs.get('args')
         if self.query is not None:
             self.query_expression = jmespath.compile(self.query)
         self.log_group_prefix = kwargs.get('log_group_prefix')
@@ -229,6 +235,52 @@ class AWSLogs(object):
                 elif max(stream['firstEventTimestamp'], window_start) <= \
                         min(stream['lastEventTimestamp'], window_end):
                     yield stream['logStreamName']
+
+    # TODO refactor this method and list_logs to share code
+    def query_logs_by_template(self):
+        print 'in query_logs_by_template'
+        print 'query_template_file: {}'.format(self.query_template_file)
+
+        template_args = {}
+        for arg in self.query_template_args:
+            key_val = arg.split('=', 1)
+            if len(key_val) != 2:
+                raise Exception('Invalid arg: {}'.format(arg)) # TODO move arg validation and parsing to bin
+            template_args[key_val[0]] = key_val[1] # todo figure out a more idiomatidc way to do this
+
+
+
+        query_template = yaml.load(self.query_template_file) # TODO validate query template
+        for k, v in query_template.items():
+            query_template[k] = pystache.render(v, template_args)
+
+        print 'templated query: {}'.format(query_template)
+
+        streams = list(self.get_streams(query_template['log_group_name'], query_template['log_stream_prefix']))
+        print 'got streams {}'.format(streams)
+
+        aws_log_generator = AWSLogGenerator(log_group_name=query_template['log_group_name'],
+                                            log_streams=streams,
+                                            start_time=self.parse_datetime('1d'),
+                                            filter_pattern=query_template['aws_filter_pattern'])
+
+        print 'some aws log generator: {}'.format(aws_log_generator)
+        for event in aws_log_generator.generate_logs(self.client):
+            print 'got event: {}'.format(event)
+
+        raise Exception("got to the end breh")
+
+
+        # kwargs = {'logGroupName': query_template['log_group_name'],
+        #           'interleaved': True,
+        #           'logStreamNames': streams,
+        #           'filterPattern': query_template['aws_filter_pattern'],
+        #           'startTime': self.parse_datetime('1w')}
+        #
+        # response = self.client.filter_log_events(**kwargs)
+        # print response
+        # for event in response.get('events', []):
+        #     print 'got event: {}'.format(event)
 
     def color(self, text, color):
         """Returns coloured version of ``text`` if ``color_enabled``."""

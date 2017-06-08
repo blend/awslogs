@@ -20,7 +20,7 @@ def main(argv=None):
 
     argv = (argv or sys.argv)[1:]
 
-    parser = argparse.ArgumentParser(usage=("%(prog)s [ get | groups | streams ]"))
+    parser = argparse.ArgumentParser(usage=("%(prog)s [ get | groups | streams | query ]"))
     parser.add_argument("--version", action="version",
                         version="%(prog)s " + __version__)
 
@@ -68,6 +68,8 @@ def main(argv=None):
                             help="End time")
 
     subparsers = parser.add_subparsers()
+
+
 
     # get
     get_parser = subparsers.add_parser('get', description='Get logs')
@@ -150,6 +152,19 @@ def main(argv=None):
     streams_parser.add_argument("log_group_name",
                                 type=str,
                                 help="log group name")
+
+    # query
+    query_parser = subparsers.add_parser("query", description="Query logs via a template")
+    query_parser.set_defaults(func="query_logs_by_template")
+
+    query_parser.add_argument("query_template_file",
+                               type=file, # TODO create a custom type parser to scan other directories for query files
+                               help='A file containing a valid query')
+
+    query_parser.add_argument('--args',
+                              type=str,
+                              nargs='*',
+                              help='Arguments to generate the template from')
 
     # Parse input
     options, args = parser.parse_known_args(argv)
