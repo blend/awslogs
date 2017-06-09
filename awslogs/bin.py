@@ -152,7 +152,7 @@ def main(argv=None):
     streams_parser.add_argument("log_group_name",
                                 type=str,
                                 help="log group name")
-
+                                
     # query
     query_parser = subparsers.add_parser("query", description="Query logs via a template")
     query_parser.set_defaults(func="query_logs_by_template")
@@ -165,6 +165,8 @@ def main(argv=None):
                               type=str,
                               nargs='*',
                               help='Arguments to generate the template from')
+
+    add_date_range_arguments(query_parser, default_start='1h')
 
     # Parse input
     options, args = parser.parse_known_args(argv)

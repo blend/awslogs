@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from collections import deque
 from .aws_log_generator import AWSLogGenerator
 from .logprinter import LogPrinter
+from .querytemplate import QueryTemplate
 
 import boto3
 from botocore.compat import json, six, total_seconds
@@ -18,17 +19,10 @@ from dateutil.tz import tzutc
 
 from . import exceptions
 
-
-
 class AWSLogs(object):
-
-    ACTIVE = 1
-    EXHAUSTED = 2
-    WATCH_SLEEP = 2
 
     FILTER_LOG_EVENTS_STREAMS_LIMIT = 100
     MAX_EVENTS_PER_CALL = 10000
-    ALL_WILDCARD = 'ALL'
 
     # TODO separate out the required options for each subcommand
     def __init__(self, **kwargs):
@@ -37,7 +31,6 @@ class AWSLogs(object):
                           'query')
 
         self.output_options = {k:v for k, v in kwargs.iteritems() if k in valid_output_options}
-
         self.aws_region = kwargs.get('aws_region')
         self.aws_access_key_id = kwargs.get('aws_access_key_id')
         self.aws_secret_access_key = kwargs.get('aws_secret_access_key')
@@ -130,51 +123,30 @@ class AWSLogs(object):
                         min(stream['lastEventTimestamp'], window_end):
                     yield stream['logStreamName']
 
-    # TODO refactor this method and list_logs to share code
+    # TODO clean this up
     def query_logs_by_template(self):
         print 'in query_logs_by_template'
         print 'query_template_file: {}'.format(self.query_template_file)
 
-        template_args = {}
-        for arg in self.query_template_args:
-            key_val = arg.split('=', 1)
-            if len(key_val) != 2:
-                raise Exception('Invalid arg: {}'.format(arg)) # TODO move arg validation and parsing to bin
-            template_args[key_val[0]] = key_val[1] # todo figure out a more idiomatidc way to do this
 
 
 
-        query_template = yaml.load(self.query_template_file) # TODO validate query template
-        for k, v in query_template.items():
-            query_template[k] = pystache.render(v, template_args)
-
-        print 'templated query: {}'.format(query_template)
-
-        streams = list(self.get_streams(query_template['log_group_name'], query_template['log_stream_prefix']))
+        query_template = QueryTemplate(self.query_template_file, self.query_template_args)
+        print query_template.log_group_name
+        streams = list(self.get_streams(query_template.log_group_name, query_template.log_stream_prefix))
         print 'got streams {}'.format(streams)
 
-        aws_log_generator = AWSLogGenerator(log_group_name=query_template['log_group_name'],
+        aws_log_generator = AWSLogGenerator(log_group_name=query_template.log_group_name,
                                             log_streams=streams,
                                             start_time=self.parse_datetime('1d'),
-                                            filter_pattern=query_template['aws_filter_pattern'])
+                                            filter_pattern=query_template.filter_pattern)
 
         print 'some aws log generator: {}'.format(aws_log_generator)
-        log_printer = LogPrinter(self.output_options)
-        aws_log_generator.fetch_and_print_logs(self, client, log_printer)
+        max_stream_length = max([len(s) for s in streams]) if streams else 10
+        log_printer = LogPrinter(query_template.log_group_name, max_stream_length, **self.output_options)
+        aws_log_generator.get_and_print_logs(self.client, log_printer)
 
         raise Exception("got to the end breh")
-
-
-        # kwargs = {'logGroupName': query_template['log_group_name'],
-        #           'interleaved': True,
-        #           'logStreamNames': streams,
-        #           'filterPattern': query_template['aws_filter_pattern'],
-        #           'startTime': self.parse_datetime('1w')}
-        #
-        # response = self.client.filter_log_events(**kwargs)
-        # print response
-        # for event in response.get('events', []):
-        #     print 'got event: {}'.format(event)
 
 
 
