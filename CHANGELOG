@@ -1,6 +1,7 @@
-0.11.0
+0.10.1
 ======
 - Remove STREAM_EXPRESSION option for 'get' command and replcae it with a mandatory STREAM_PREFIX argument
+- Add new query subcommand
 
 0.10.0
 =======
