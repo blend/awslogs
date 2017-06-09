@@ -24,6 +24,48 @@ def main(argv=None):
     parser.add_argument("--version", action="version",
                         version="%(prog)s " + __version__)
 
+    def add_output_arguments(parser):
+        parser.add_argument("-G",
+                                "--no-group",
+                                action='store_false',
+                                dest='output_group_enabled',
+                                help="Do not display group name")
+
+        parser.add_argument("-S",
+                                "--no-stream",
+                                action='store_false',
+                                dest='output_stream_enabled',
+                                help="Do not display stream name")
+
+        parser.add_argument("--timestamp",
+                                action='store_true',
+                                dest='output_timestamp_enabled',
+                                help="Add creation timestamp to the output")
+
+        parser.add_argument("--ingestion-time",
+                                action='store_true',
+                                dest='output_ingestion_time_enabled',
+                                help="Add ingestion time to the output")
+
+        parser.add_argument("--no-color",
+                                action='store_false',
+                                dest='color_enabled',
+                                help="Do not color output")
+
+        parser.add_argument("-q",
+                                "--query",
+                                action="store",
+                                dest="query",
+                                help="JMESPath query to use in filtering the response data")
+
+    def add_watch_argument(parser):
+        parser.add_argument("-w",
+                            "--watch",
+                            action='store_true',
+                            dest='watch',
+                            help="Query for new log lines constantly")
+
+
     def add_common_arguments(parser):
         parser.add_argument("--aws-access-key-id",
                             dest="aws_access_key_id",
@@ -70,7 +112,6 @@ def main(argv=None):
     subparsers = parser.add_subparsers()
 
 
-
     # get
     get_parser = subparsers.add_parser('get', description='Get logs')
     get_parser.set_defaults(func="list_logs")
@@ -91,46 +132,11 @@ def main(argv=None):
                                   "use for filtering the response. If not "
                                   "provided, all the events are matched."))
 
-    get_parser.add_argument("-w",
-                            "--watch",
-                            action='store_true',
-                            dest='watch',
-                            help="Query for new log lines constantly")
-
-    get_parser.add_argument("-G",
-                            "--no-group",
-                            action='store_false',
-                            dest='output_group_enabled',
-                            help="Do not display group name")
-
-    get_parser.add_argument("-S",
-                            "--no-stream",
-                            action='store_false',
-                            dest='output_stream_enabled',
-                            help="Do not display stream name")
-
-    get_parser.add_argument("--timestamp",
-                            action='store_true',
-                            dest='output_timestamp_enabled',
-                            help="Add creation timestamp to the output")
-
-    get_parser.add_argument("--ingestion-time",
-                            action='store_true',
-                            dest='output_ingestion_time_enabled',
-                            help="Add ingestion time to the output")
-
+    add_watch_argument(get_parser)
+    add_output_arguments(get_parser)
     add_date_range_arguments(get_parser)
 
-    get_parser.add_argument("--no-color",
-                            action='store_false',
-                            dest='color_enabled',
-                            help="Do not color output")
 
-    get_parser.add_argument("-q",
-                            "--query",
-                            action="store",
-                            dest="query",
-                            help="JMESPath query to use in filtering the response data")
 
     # groups
     groups_parser = subparsers.add_parser('groups', description='List groups')
@@ -152,7 +158,7 @@ def main(argv=None):
     streams_parser.add_argument("log_group_name",
                                 type=str,
                                 help="log group name")
-                                
+
     # query
     query_parser = subparsers.add_parser("query", description="Query logs via a template")
     query_parser.set_defaults(func="query_logs_by_template")
@@ -166,6 +172,9 @@ def main(argv=None):
                               nargs='*',
                               help='Arguments to generate the template from')
 
+    add_common_arguments(query_parser)
+    add_output_arguments(query_parser)
+    add_watch_argument(query_parser)
     add_date_range_arguments(query_parser, default_start='1h')
 
     # Parse input

@@ -57,7 +57,6 @@ class LogPrinter(object):
             )
 
         message = event['message']
-        # TODO add this back in
         if self.query is not None and message[0] == '{':
             parsed = json.loads(event['message'])
             message = self.query_expression.search(parsed)

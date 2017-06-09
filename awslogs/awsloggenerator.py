@@ -47,7 +47,6 @@ class AWSLogGenerator(object):
             kwargs['filterPattern'] = self.filter_pattern
 
         while True:
-            # print 'filtering log events with dictionary: {}'.format(kwargs)
             response = client.filter_log_events(**kwargs)
 
             for event in response.get('events', []):
@@ -64,7 +63,6 @@ class AWSLogGenerator(object):
     def get_and_print_logs(self, client, log_printer):
         for event in self.__generate_logs(client):
             if event is END_OF_STREAM:
-                sys.stderr.write('got event: {}'.format(event))
                 if self.watch:
                     time.sleep(1)
                     continue

@@ -7,9 +7,11 @@ import yaml
 import pystache
 from datetime import datetime, timedelta
 from collections import deque
-from .aws_log_generator import AWSLogGenerator
+from termcolor import colored
+from .awsloggenerator import AWSLogGenerator
 from .logprinter import LogPrinter
 from .querytemplate import QueryTemplate
+
 
 import boto3
 from botocore.compat import json, six, total_seconds
@@ -39,6 +41,10 @@ class AWSLogs(object):
         self.log_stream_prefix = kwargs.get('log_stream_prefix')
         self.filter_pattern = kwargs.get('filter_pattern')
         self.watch = kwargs.get('watch')
+        if self.watch:
+            sys.stderr.write(colored("Watch flag is currently broken! "
+                             "You'll see new logs displayed to the console, "
+                             "but they will be stale.\n", "yellow"))
         self.start = self.parse_datetime(kwargs.get('start'))
         self.end = self.parse_datetime(kwargs.get('end'))
         self.query = kwargs.get('query')
@@ -105,6 +111,7 @@ class AWSLogs(object):
 
     def get_streams(self, log_group_name, log_stream_prefix = None):
         """Returns available CloudWatch logs streams in ``log_group_name``."""
+        print 'Searching for log streams belonging to group {} with prefix {}'.format(log_group_name, log_stream_prefix)
         kwargs = {'logGroupName': log_group_name}
         if log_stream_prefix is not None:
             kwargs['logStreamNamePrefix'] = log_stream_prefix
@@ -123,30 +130,21 @@ class AWSLogs(object):
                         min(stream['lastEventTimestamp'], window_end):
                     yield stream['logStreamName']
 
-    # TODO clean this up
     def query_logs_by_template(self):
-        print 'in query_logs_by_template'
-        print 'query_template_file: {}'.format(self.query_template_file)
-
-
-
 
         query_template = QueryTemplate(self.query_template_file, self.query_template_args)
-        print query_template.log_group_name
         streams = list(self.get_streams(query_template.log_group_name, query_template.log_stream_prefix))
-        print 'got streams {}'.format(streams)
+        if not streams:
+            raise exceptions.NoStreamsFilteredError(query_template.log_stream_prefix)
 
         aws_log_generator = AWSLogGenerator(log_group_name=query_template.log_group_name,
                                             log_streams=streams,
                                             start_time=self.parse_datetime('1d'),
                                             filter_pattern=query_template.filter_pattern)
 
-        print 'some aws log generator: {}'.format(aws_log_generator)
         max_stream_length = max([len(s) for s in streams]) if streams else 10
         log_printer = LogPrinter(query_template.log_group_name, max_stream_length, **self.output_options)
         aws_log_generator.get_and_print_logs(self.client, log_printer)
-
-        raise Exception("got to the end breh")
 
 
 
