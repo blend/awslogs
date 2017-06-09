@@ -5,6 +5,13 @@ class BaseAWSLogsException(Exception):
     def hint(self):
         return "Unknown Error."
 
+class AWSLogsException(BaseAWSLogsException):
+
+    code = 1
+
+    def hint(self):
+        return self.args[0]
+
 
 class UnknownDateError(BaseAWSLogsException):
 
@@ -31,3 +38,25 @@ class NoStreamsFilteredError(BaseAWSLogsException):
 
     def hint(self):
         return ("No streams match your prefix '{0}' for the given time period.").format(*self.args)
+
+class InvalidQueryError(BaseAWSLogsException):
+
+    code = 8
+
+    def hint(self):
+        return ('Invalid query. Missing required field: {0}').format(*self.args)
+
+class InvalidQueryArgumentError(BaseAWSLogsException):
+
+    code = 9
+
+    def hint(self):
+        return ('Invalid query template argument: {0}\n'
+                'Query template arguments must be of the form template_id=template_val').format(*self.args)
+
+class MissingTemplateArgumentError(BaseAWSLogsException):
+
+    code = 10
+
+    def hint(self):
+        return ('Missing template argument for identifier: {0}').format(*self.args)
