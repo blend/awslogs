@@ -22,6 +22,12 @@ Changes in this fork
 --------------------
 Most of the code is unchanged. This fork removes the STREAM_EXPRESSION argument and replaces it with a mandatory STREAM_PREFIX argument. The original fork finds log streams by fetching all log streams for a particular log group, and subsequently filtering on the optional STREAM_EXPRESSION argument. This operation can take minutes for log groups which contain a lot of streams (> 5000). This fork gets around this by forcing the user to specify a log stream prefix, which ultimately reduces the time needed to fech log streams to about a second (assuming that the prefix is well-chosen).
 
+There is also a new subcommand `query`, which allows the user to specify a 'query template' YAML file containing pre-specified filtering criteria. The intent of adding this subcommand was to alleviate some frustration in having to repeatedly type out common queries which only differ in the filter criteria (e.g. search for logs containing an arbitrary value for some field 'a').
+
+The `--watch` flag doesn't actually work (while it continuously fetches for logs matching the specified criteria, but the logs fetched are not the most recentl logs).
+
+
+
 Features
 --------
 
@@ -38,10 +44,6 @@ Features
 * List existing streams
 
   - ``$ awslogs streams /var/log/syslog``
-
-* Watch logs as they are created
-
-  - ``$ awslogs get /var/log/syslog ALL --watch``
 
 * Human-friendly time filtering:
 
@@ -60,7 +62,7 @@ Features
 Example
 -------
 
-Running: ``awslogs get /var/logs/syslog ALL -s1d`` will return you events from any ``stream`` in the ``/var/logs/syslog`` group generated in the last day.
+Running: ``awslogs get /var/logs/syslog <prefix> -s1d`` will return you events from any ``stream`` with prefix ``prefix`` in the ``/var/logs/syslog`` group generated in the last day.
 
 .. image:: https://github.com/jorgebastida/awslogs/raw/master/media/screenshot.png
 
@@ -70,11 +72,7 @@ Installation
 
 You can easily install ``awslogs`` using ``pip``::
 
-  $ pip install awslogs
-
-If you are on OSX El Capitan, use the following (Why? Check Donald Stufft's comment `here <https://github.com/pypa/pip/issues/3165#issuecomment-145856429>`_) ::
-
-  $ pip install awslogs --ignore-installed six
+  $ pip install git+https://github.com/blend/awslogs
 
 
 
@@ -139,6 +137,33 @@ For example, if you only want to download only the report events from a Lambda s
 
 
 Full documentation of how to write patterns: http://docs.aws.amazon.com/AmazonCloudWatch/latest/DeveloperGuide/FilterAndPatternSyntax.html
+
+Query template options
+----------------------
+
+General usage
+
+::
+
+  awslogs query <query_template_file> [--args arg1=val1 arg2=val2 ...]
+
+It is possible to codify filter patterns into a 'query template' YAML file:
+
+::
+
+  # query_by_field.yml
+  log_group_name: your_log_group_name # REQUIRED
+  log_stream_prefix: stream_prefix # REQUIRED
+  filter_pattern: "{$.path.to.field = \"{{some_string}}\" }" # a valid AWS filter. See this link for more information on how to construct filter patterns: http://docs.aws.amazon.com/cli/latest/userguide/controlling-output.html#controlling-output-filter
+
+Then, query the logs against your template like so:
+
+``$ awslogs query query_by_field.yml --args some_string=Lannister``
+
+Running this will yield logs from streams with prefix ``stream_prefix`` in the group ``your_log_group_name`` which contain a field ``path.to.field`` whose value is ``Lannister``.
+
+It is also possible to incluce template variables in the ``log_group_name`` and ``log_stream_prefix`` fields.
+
 
 JSON logs
 ------------

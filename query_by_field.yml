@@ -1,0 +1,4 @@
+# query_by_field.yml
+log_group_name: your_log_group_name # REQUIRED
+log_stream_prefix: stream_prefix # REQUIRED
+filter_pattern: "{$.path.to.field = \"{{some_string}}\" }" # a valid AWS filter. See this link for more information on how to construct filter patterns: http://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html
