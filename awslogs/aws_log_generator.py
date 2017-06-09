@@ -1,31 +1,29 @@
+import sys
 from collections import deque
+
+
+MAX_EVENTS_PER_CALL = 10000
+
+END_OF_STREAM = object()
 
 # TODO look into renaming this class / file to conform to standard naming conventions
 
-"""kwargs = {'logGroupName': self.log_group_name,
-          'interleaved': True}
-
-if streams:
-    kwargs['logStreamNames'] = streams
-
-if self.start:
-    kwargs['startTime'] = self.start
-
-if self.end:
-    kwargs['endTime'] = self.end
-
-if self.filter_pattern:
-    kwargs['filterPattern'] = self.filter_pattern"""
 
 class AWSLogGenerator(object):
 
     MAX_EVENTS_PER_CALL = 10000
 
-    def __init__(self, log_group_name=None,
+    END_OF_STREAM = object()
+
+    # TODO figure out a better way to initialize this object
+    def __init__(self,
+                 watch=False,
+                 log_group_name=None,
                  log_streams=None,
                  filter_pattern=None,
                  start_time='1w',
                  end_time=None):
+        self.watch = watch
         self.log_group_name = log_group_name
         self.log_streams = log_streams
         self.start_time = start_time
@@ -36,15 +34,13 @@ class AWSLogGenerator(object):
 
 
 
-    def generate_logs(self, client): # move client argument to member variable
+    def __generate_logs(self, client): # move client argument to member variable
 
         interleaving_sanity = deque(maxlen=self.MAX_EVENTS_PER_CALL)
 
         kwargs = {'logGroupName': self.log_group_name,
                   'logStreamNames': self.log_streams,
                   'startTime': self.start_time}
-
-        print 'got args: {}'.format(kwargs)
 
         if self.filter_pattern:
             kwargs['filterPattern'] = self.filter_pattern
@@ -61,4 +57,17 @@ class AWSLogGenerator(object):
             if 'nextToken' in response:
                 kwargs['nextToken'] = response['nextToken']
             else:
-                yield 'END_OF_STREAM' # todo refactor this constant
+                yield END_OF_STREAM
+
+
+    def get_and_print_logs(self, client, log_printer):
+        for event in self.__generate_logs(client):
+            if event is END_OF_STREAM:
+                sys.stderr.write('got event: {}'.format(event))
+                if self.watch:
+                    time.sleep(1)
+                    continue
+                else:
+                    return
+
+            log_printer.print_log(event)

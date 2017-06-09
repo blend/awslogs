@@ -8,22 +8,16 @@ import pystache
 from datetime import datetime, timedelta
 from collections import deque
 from .aws_log_generator import AWSLogGenerator
+from .logprinter import LogPrinter
 
 import boto3
 from botocore.compat import json, six, total_seconds
 
-import jmespath
-
-from termcolor import colored
 from dateutil.parser import parse
 from dateutil.tz import tzutc
 
 from . import exceptions
 
-
-def milis2iso(milis):
-    res = datetime.utcfromtimestamp(milis/1000.0).isoformat()
-    return (res + ".000")[:23] + 'Z'
 
 
 class AWSLogs(object):
@@ -38,6 +32,12 @@ class AWSLogs(object):
 
     # TODO separate out the required options for each subcommand
     def __init__(self, **kwargs):
+        valid_output_options = ('color_enabled', 'output_stream_enabled', 'output_group_enabled',
+                          'output_timestamp_enabled', 'output_ingestion_time_enabled',
+                          'query')
+
+        self.output_options = {k:v for k, v in kwargs.iteritems() if k in valid_output_options}
+
         self.aws_region = kwargs.get('aws_region')
         self.aws_access_key_id = kwargs.get('aws_access_key_id')
         self.aws_secret_access_key = kwargs.get('aws_secret_access_key')
@@ -46,19 +46,12 @@ class AWSLogs(object):
         self.log_stream_prefix = kwargs.get('log_stream_prefix')
         self.filter_pattern = kwargs.get('filter_pattern')
         self.watch = kwargs.get('watch')
-        self.color_enabled = kwargs.get('color_enabled')
-        self.output_stream_enabled = kwargs.get('output_stream_enabled')
-        self.output_group_enabled = kwargs.get('output_group_enabled')
-        self.output_timestamp_enabled = kwargs.get('output_timestamp_enabled')
-        self.output_ingestion_time_enabled = kwargs.get(
-            'output_ingestion_time_enabled')
         self.start = self.parse_datetime(kwargs.get('start'))
         self.end = self.parse_datetime(kwargs.get('end'))
         self.query = kwargs.get('query')
         self.query_template_file = kwargs.get('query_template_file')
         self.query_template_args = kwargs.get('args')
-        if self.query is not None:
-            self.query_expression = jmespath.compile(self.query)
+
         self.log_group_prefix = kwargs.get('log_group_prefix')
         self.client = boto3.client(
             'logs',
@@ -80,118 +73,19 @@ class AWSLogs(object):
         elif len(streams) == 0:
             raise exceptions.NoStreamsFilteredError(self.log_stream_prefix)
 
-        max_stream_length = max([len(s) for s in streams]) if streams else 10 # TODO add warning message here
-        group_length = len(self.log_group_name)
 
         # Note: filter_log_events paginator is broken
         # ! Error during pagination: The same next token was received twice
         do_wait = object()
+        aws_log_generator = AWSLogGenerator(log_group_name=self.log_group_name,
+                                            log_streams=streams,
+                                            start_time=self.start,
+                                            filter_pattern=self.filter_pattern) # TODO add end time
 
-        def generator():
-            """Yield events into trying to deduplicate them using a lru queue.
-            AWS API stands for the interleaved parameter that:
-                interleaved (boolean) -- If provided, the API will make a best
-                effort to provide responses that contain events from multiple
-                log streams within the log group interleaved in a single
-                response. That makes some responses return some subsequent
-                response duplicate events. In a similar way when awslogs is
-                called with --watch option, we need to findout which events we
-                have alredy put in the queue in order to not do it several
-                times while waiting for new ones and reusing the same
-                next_token. The site of this queue is MAX_EVENTS_PER_CALL in
-                order to not exhaust the memory.
-            """
-            interleaving_sanity = deque(maxlen=self.MAX_EVENTS_PER_CALL)
-            kwargs = {'logGroupName': self.log_group_name,
-                      'interleaved': True}
-
-            if streams:
-                kwargs['logStreamNames'] = streams
-
-            if self.start:
-                kwargs['startTime'] = self.start
-
-            if self.end:
-                kwargs['endTime'] = self.end
-
-            if self.filter_pattern:
-                kwargs['filterPattern'] = self.filter_pattern
-
-            while True:
-                # print 'filtering log events with dictionary: {}'.format(kwargs)
-                response = self.client.filter_log_events(**kwargs)
-
-                for event in response.get('events', []):
-                    if event['eventId'] not in interleaving_sanity:
-                        interleaving_sanity.append(event['eventId'])
-                        yield event
-
-                if 'nextToken' in response:
-                    kwargs['nextToken'] = response['nextToken']
-                else:
-                    yield do_wait
-
-        def consumer():
-            for event in generator():
-
-                if event is do_wait:
-                    if self.watch:
-                        time.sleep(1)
-                        continue
-                    else:
-                        return
-
-                output = []
-                if self.output_group_enabled:
-                    output.append(
-                        self.color(
-                            self.log_group_name.ljust(group_length, ' '),
-                            'green'
-                        )
-                    )
-                if self.output_stream_enabled:
-                    output.append(
-                        self.color(
-                            event['logStreamName'].ljust(max_stream_length,
-                                                         ' '),
-                            'cyan'
-                        )
-                    )
-                if self.output_timestamp_enabled:
-                    output.append(
-                        self.color(
-                            milis2iso(event['timestamp']),
-                            'yellow'
-                        )
-                    )
-                if self.output_ingestion_time_enabled:
-                    output.append(
-                        self.color(
-                            milis2iso(event['ingestionTime']),
-                            'blue'
-                        )
-                    )
-
-                message = event['message']
-                if self.query is not None and message[0] == '{':
-                    parsed = json.loads(event['message'])
-                    message = self.query_expression.search(parsed)
-                    if not isinstance(message, six.string_types):
-                        message = json.dumps(message)
-                output.append(message.rstrip())
-
-                print(' '.join(output))
-                try:
-                    sys.stdout.flush()
-                except IOError as e:
-                    if e.errno == errno.EPIPE:
-                        # SIGPIPE received, so exit
-                        os._exit(0)
-                    else:
-                        # We don't want to handle any other errors from this
-                        raise
+        max_stream_length = max([len(s) for s in streams]) if streams else 10
+        log_printer = LogPrinter(self.log_group_name, max_stream_length, **self.output_options)
         try:
-            consumer()
+            aws_log_generator.get_and_print_logs(self.client, log_printer)
         except KeyboardInterrupt:
             print('Closing...\n')
             os._exit(0)
@@ -265,8 +159,8 @@ class AWSLogs(object):
                                             filter_pattern=query_template['aws_filter_pattern'])
 
         print 'some aws log generator: {}'.format(aws_log_generator)
-        for event in aws_log_generator.generate_logs(self.client):
-            print 'got event: {}'.format(event)
+        log_printer = LogPrinter(self.output_options)
+        aws_log_generator.fetch_and_print_logs(self, client, log_printer)
 
         raise Exception("got to the end breh")
 
@@ -282,11 +176,7 @@ class AWSLogs(object):
         # for event in response.get('events', []):
         #     print 'got event: {}'.format(event)
 
-    def color(self, text, color):
-        """Returns coloured version of ``text`` if ``color_enabled``."""
-        if self.color_enabled:
-            return colored(text, color)
-        return text
+
 
     def parse_datetime(self, datetime_text):
         """Parse ``datetime_text`` into a ``datetime``."""
