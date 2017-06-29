@@ -14,6 +14,7 @@ from .querytemplate import QueryTemplate
 
 
 import boto3
+import boto3_session_cache
 from botocore.compat import json, six, total_seconds
 
 from dateutil.parser import parse
@@ -52,14 +53,13 @@ class AWSLogs(object):
         self.query_template_args = kwargs.get('args')
 
         self.log_group_prefix = kwargs.get('log_group_prefix')
-        self.client = boto3.client(
+        self.client = boto3_session_cache.client(
             'logs',
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key,
             aws_session_token=self.aws_session_token,
             region_name=self.aws_region
         )
-
 
     def list_logs(self):
         streams = list(self.get_streams(self.log_group_name, self.log_stream_prefix))
